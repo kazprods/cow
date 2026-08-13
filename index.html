@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kaz.prods — editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#121630;
+    --panel:#1a1f42;
+    --panel-2:#232a52;
+    --line:#3a4278;
+    --text:#f8f9ff;
+    --muted:#b7bede;
+    --blue:#5fa2ff;
+    --purple:#b26bff;
+    --pink:#ff6bbd;
+    --cyan:#69f8dc;
+    --grad: linear-gradient(90deg,var(--blue),var(--purple));
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+
+  body{
+    background:var(--void);
+    color:var(--text);
+    font-family:'Space Grotesk',sans-serif;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  ::selection{background:var(--purple);color:#fff;}
+  a{color:inherit;text-decoration:none;}
+  button{ font-family:inherit; cursor:pointer; }
+  a:focus-visible, button:focus-visible{
+    outline:2px solid var(--cyan);
+    outline-offset:3px;
+    border-radius:4px;
+  }
+
+  .mono{font-family:'Space Mono',monospace;}
+  .display{font-family:'Orbitron',sans-serif;}
+
+  /* ---------- background atmosphere ---------- */
+  .bg-fixed{ position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+
+  .bg-grid{
+    position:absolute; inset:-10% -10%;
+    background-image:
+      linear-gradient(to right, rgba(79,139,255,0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(79,139,255,0.06) 1px, transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, #000 40%, transparent 85%);
+            mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, #000 40%, transparent 85%);
+  }
+
+  .glow{ position:absolute; width:52vmax; height:52vmax; border-radius:50%; filter:blur(110px); opacity:0.4; }
+  .glow-blue{ top:-18vmax; left:-14vmax; background:var(--blue); animation:drift1 22s ease-in-out infinite; }
+  .glow-purple{ bottom:-20vmax; right:-16vmax; background:var(--purple); animation:drift2 26s ease-in-out infinite; }
+
+  @keyframes drift1{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(4vmax,3vmax) scale(1.08); } }
+  @keyframes drift2{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(-3vmax,-4vmax) scale(1.05); } }
+
+  .scanlines{
+    position:absolute; inset:0;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,0.014) 0px, rgba(255,255,255,0.014) 1px, transparent 1px, transparent 3px);
+    opacity:0.3;
+  }
+
+  main{position:relative;z-index:1;}
+
+  section{
+    padding:clamp(64px,10vw,120px) clamp(20px,6vw,64px);
+    max-width:1180px;
+    margin:0 auto;
+  }
+
+  .eyebrow{
+    font-size:12px; letter-spacing:0.18em; color:var(--cyan);
+    display:flex; align-items:center; gap:10px; margin-bottom:18px;
+  }
+  .eyebrow::before{ content:""; width:22px; height:1px; background:var(--cyan); opacity:0.7; }
+
+  .reveal{ opacity:0; transform:translateY(22px); transition:opacity 0.7s ease, transform 0.7s ease; }
+  .reveal.is-visible{ opacity:1; transform:translateY(0); }
+
+  .tick-divider{ max-width:1180px; margin:0 auto; padding:0 clamp(20px,6vw,64px); }
+  .tick-divider .rail{ position:relative; height:1px; background:var(--line); }
+  .tick-divider .rail::after{
+    content:""; position:absolute; left:8%; top:-3px; width:7px; height:7px; border-radius:50%;
+    background:var(--cyan); box-shadow:0 0 10px 2px rgba(105,248,220,0.5);
+  }
+
+  /* ---------- hero ---------- */
+  .hero{
+    min-height:100svh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; gap:22px; padding-top:96px; padding-bottom:64px;
+  }
+
+  .rec-pill{
+    display:inline-flex; align-items:center; gap:9px; padding:8px 16px; border:1px solid var(--line);
+    border-radius:999px; background:rgba(35,42,82,0.6); backdrop-filter:blur(6px);
+    font-size:11px; letter-spacing:0.14em; color:var(--muted);
+  }
+  .rec-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--pink);
+    box-shadow:0 0 8px 2px rgba(255,107,189,0.6); animation:pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.4; transform:scale(0.72); } }
+
+  .hero-name{
+    font-size:clamp(2.6rem,9vw,5.4rem); letter-spacing:0.03em; font-weight:700; line-height:1;
+    text-shadow:0 0 26px rgba(95,162,255,0.4), 0 0 60px rgba(178,107,255,0.22); position:relative;
+  }
+
+  .hero-name .g{ display:inline-block; position:relative; }
+  .hero-name.glitching .g::before, .hero-name.glitching .g::after{
+    content:attr(data-text); position:absolute; left:0; top:0; width:100%; overflow:hidden;
+    background:var(--void); background-clip:text; -webkit-background-clip:text;
+  }
+  .hero-name.glitching .g::before{ color:var(--blue); animation:glitchTop 900ms steps(2,end) 1; }
+  .hero-name.glitching .g::after{ color:var(--purple); animation:glitchBot 900ms steps(2,end) 1; }
+  @keyframes glitchTop{
+    0%{ clip-path:inset(0 0 60% 0); transform:translate(-6px,-2px); opacity:1; }
+    60%{ clip-path:inset(0 0 20% 0); transform:translate(4px,1px); opacity:0.7; }
+    100%{ clip-path:inset(0 0 100% 0); opacity:0; }
+  }
+  @keyframes glitchBot{
+    0%{ clip-path:inset(55% 0 0 0); transform:translate(6px,2px); opacity:1; }
+    60%{ clip-path:inset(20% 0 0 0); transform:translate(-4px,-1px); opacity:0.7; }
+    100%{ clip-path:inset(100% 0 0 0); opacity:0; }
+  }
+
+  .hero-quote{ font-style:italic; color:var(--muted); font-size:clamp(0.95rem,2vw,1.15rem); max-width:34ch; }
+
+  .scroll-cue{ margin-top:26px; display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--muted); font-size:10px; letter-spacing:0.2em; }
+  .scroll-cue .line{ width:1px; height:34px; background:linear-gradient(to bottom, var(--cyan), transparent); animation:scrollLine 1.8s ease-in-out infinite; }
+  @keyframes scrollLine{
+    0%{ transform:scaleY(0.3); transform-origin:top; opacity:0.4; }
+    50%{ transform:scaleY(1); transform-origin:top; opacity:1; }
+    100%{ transform:scaleY(0.3); transform-origin:bottom; opacity:0.4; }
+  }
+
+  /* ---------- section headings ---------- */
+  .sec-head{ display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:40px; }
+  .sec-title{ font-size:clamp(1.5rem,3.4vw,2.1rem); font-weight:600; }
+  .sec-note{ color:var(--muted); font-size:13px; }
+
+  /* ---------- about / profile ---------- */
+  .about-body{ font-size:clamp(1.05rem,1.8vw,1.2rem); line-height:1.85; color:var(--text); max-width:62ch; }
+  .about-body strong{
+    background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:700;
+  }
+
+  .stat-row{ display:flex; flex-wrap:wrap; gap:10px; margin-top:26px; }
+  .chip{
+    font-family:'Space Mono',monospace; font-size:11px; letter-spacing:0.06em; color:var(--muted);
+    border:1px solid var(--line); padding:7px 12px; border-radius:999px; background:rgba(35,42,82,0.5);
+  }
+  .chip b{ color:var(--cyan); font-weight:400; }
+
+  /* ---------- generic list (services / fanbase) ---------- */
+  .block-title{ font-size:clamp(1.3rem,2.8vw,1.7rem); font-weight:600; margin:52px 0 20px; }
+  .block-title:first-child{ margin-top:0; }
+
+  .info-list{ list-style:none; display:flex; flex-direction:column; gap:12px; max-width:56ch; }
+  .info-list li{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    font-size:clamp(1rem,1.6vw,1.1rem); color:var(--text);
+    padding:14px 18px; border:1px solid var(--line); border-radius:12px; background:rgba(35,42,82,0.45);
+  }
+  .info-list li .label{ display:flex; align-items:center; gap:14px; }
+  .info-list li .label::before{
+    content:""; width:8px; height:8px; flex:0 0 auto; border-radius:50%; background:var(--grad);
+  }
+  .info-list li .time{
+    font-family:'Space Mono',monospace; font-size:11px; color:var(--cyan); letter-spacing:0.03em; white-space:nowrap;
+  }
+
+  .note-text{ margin-top:16px; font-size:12px; color:var(--muted); letter-spacing:0.04em; }
+
+  /* ---------- fanbase section ---------- */
+  #fanbase{ padding-top:0; }
+
+  /* ---------- contact ---------- */
+  .contact{
+    text-align:left;
+    padding:clamp(50px,9vw,90px) clamp(20px,6vw,64px);
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(95,162,255,0.06), rgba(178,107,255,0.06));
+  }
+  .contact-inner{ max-width:56ch; margin:0 auto; }
+  .contact-title{ font-size:clamp(1.5rem,3.2vw,2rem); font-weight:600; margin-bottom:14px; text-align:center; }
+  .contact-text{ font-size:clamp(1rem,2vw,1.1rem); line-height:1.7; color:var(--text); text-align:center; }
+
+  .discord-box{
+    margin:26px auto 0;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    border:1px solid var(--line); border-radius:14px; padding:12px 12px 12px 20px;
+    background:rgba(18,22,48,0.6);
+  }
+  .discord-name{ font-family:'Space Mono',monospace; font-size:clamp(0.95rem,2vw,1.05rem); color:var(--text); }
+  .copy-btn{
+    border:none; border-radius:10px; padding:11px 18px;
+    background:var(--grad); color:#fff; font-weight:600; font-size:13px;
+    display:flex; align-items:center; gap:6px; white-space:nowrap;
+    transition:opacity 0.2s ease, transform 0.2s ease;
+  }
+  .copy-btn:hover{ opacity:0.88; transform:translateY(-1px); }
+  .copy-btn svg{ width:14px; height:14px; fill:#fff; }
+
+  .notice-title{
+    font-size:clamp(1.1rem,2.2vw,1.3rem); font-weight:600; margin:36px 0 10px; text-align:center;
+  }
+  .notice-text{
+    font-size:clamp(0.92rem,1.8vw,1rem); line-height:1.7; color:var(--muted); text-align:center;
+  }
+
+  /* ---------- footer ---------- */
+  footer{
+    padding:clamp(70px,12vw,120px) clamp(20px,6vw,64px) 40px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; gap:22px;
+  }
+  .goodbye{ color:var(--muted); font-size:14px; letter-spacing:0.04em; }
+  .foot-name{ font-family:'Orbitron',sans-serif; font-weight:700; font-size:clamp(1.8rem,4.5vw,2.6rem); }
+  .foot-name .kaz{ background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+  .socials{ display:flex; gap:18px; margin-top:4px; }
+  .social-btn{
+    width:44px; height:44px; border-radius:50%; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; color:var(--muted);
+    transition:color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+  }
+  .social-btn svg{ width:19px; height:19px; fill:currentColor; }
+  .social-btn:hover{ color:var(--text); border-color:var(--purple); transform:translateY(-3px); }
+
+  .copyright{ margin-top:18px; font-family:'Space Mono',monospace; font-size:11px; color:#8890b8; letter-spacing:0.05em; }
+
+  @media (max-width:600px){
+    .discord-box{ flex-direction:column; align-items:stretch; text-align:center; }
+    .copy-btn{ justify-content:center; }
+    .info-list li{ flex-direction:column; align-items:flex-start; gap:6px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:0.001ms !important; animation-iteration-count:1 !important;
+      transition-duration:0.001ms !important; scroll-behavior:auto !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-fixed" aria-hidden="true">
+  <div class="glow glow-blue"></div>
+  <div class="glow glow-purple"></div>
+  <div class="bg-grid"></div>
+  <div class="scanlines"></div>
+</div>
+
+<main>
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="rec-pill mono">
+      <span class="rec-dot" aria-hidden="true"></span>
+      EDITING SOFTWARE — ALIGHT MOTION
+    </div>
+
+    <h1 class="hero-name display" id="heroName">
+      <span class="g" data-text="kaz.prods">kaz.prods</span>
+    </h1>
+
+    <p class="hero-quote">"great edits aren't seen — they're felt."</p>
+
+    <div class="scroll-cue mono" aria-hidden="true">
+      <span>SCROLL</span>
+      <span class="line"></span>
+    </div>
+  </section>
+
+  <div class="tick-divider" aria-hidden="true"><div class="rail"></div></div>
+
+  <!-- ============ PROFILE + SERVICES ============ -->
+  <section id="about">
+    <div class="eyebrow mono">PROFILE</div>
+    <div class="reveal">
+      <p class="about-body">
+        i'm <strong>kaz</strong> — 13 years old, and i've been editing since <strong>2024</strong>.
+        most of what i post started as <strong>TikTok trend recreations</strong>, chasing the timing,
+        the cuts, the sync to the beat. <strong>Alight Motion</strong> is where it all comes together —
+        still learning, still leveling up, one edit at a time.
+      </p>
+      <div class="stat-row">
+        <span class="chip">AGE <b>13</b></span>
+        <span class="chip">EDITING SINCE <b>2024</b></span>
+        <span class="chip">FOCUS <b>TikTok trend recreation</b></span>
+        <span class="chip">SOFTWARE <b>Alight Motion</b></span>
+      </div>
+
+      <h3 class="block-title">List of services</h3>
+      <ul class="info-list">
+        <li><span class="label">Making an edit for the user</span><span class="time mono">2–3 hours</span></li>
+        <li><span class="label">Remaking an overlay</span><span class="time mono">30 min – 1 hour</span></li>
+        <li><span class="label">Making a CC</span><span class="time mono">1–2 hours</span></li>
+      </ul>
+      <p class="note-text mono">More services will come in the future</p>
+      <p class="note-text mono">Delivery times may vary depending on number of orders</p>
+    </div>
+  </section>
+
+  <div class="tick-divider" aria-hidden="true"><div class="rail"></div></div>
+
+  <!-- ============ FANBASE ============ -->
+  <section id="fanbase">
+    <div class="eyebrow mono">FANBASE</div>
+    <div class="reveal">
+      <h2 class="sec-title" style="margin-bottom:24px;">How popular am I?</h2>
+      <ul class="info-list">
+        <li><span class="label">642 followers on TikTok</span></li>
+        <li><span class="label">1,579 subscribers on YouTube</span></li>
+      </ul>
+      <p class="note-text mono">Information accurate as of August 13th 2026</p>
+    </div>
+  </section>
+
+  <!-- ============ CONTACT ============ -->
+  <section class="contact reveal">
+    <div class="contact-inner">
+      <h2 class="contact-title">Want to contact me?</h2>
+      <p class="contact-text">
+        If you want to contact me about any of the services above, feel free to contact me on Discord.
+      </p>
+
+      <div class="discord-box">
+        <span class="discord-name">ae.kaz7</span>
+        <button class="copy-btn" id="copyBtn" type="button" data-copy="ae.kaz7">
+          <svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+          <span id="copyBtnLabel">Copy</span>
+        </button>
+      </div>
+
+      <h3 class="notice-title">Notice</h3>
+      <p class="notice-text">
+        If you wish to use a service, please make sure you have a Discord account, and that you have at least
+        50k OwO (bot currency). If you do not meet these requirements, your service requests may be denied.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer>
+    <p class="goodbye">nice to meet you.</p>
+    <div class="foot-name"><span class="kaz">kaz</span>.prods</div>
+
+    <div class="socials">
+      <a class="social-btn" href="https://youtube.com/@kaz.ae7?si=7uMXx3Q7m8ev-Fa7" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+        <svg viewBox="0 0 24 24"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4L15.8 12l-6.2 3.6z"/></svg>
+      </a>
+      <a class="social-btn" href="https://www.tiktok.com/@kaz.prods7?_r=1&_t=ZN-98pYM5QHRVm" target="_blank" rel="noopener noreferrer" aria-label="TikTok">
+        <svg viewBox="0 0 24 24"><path d="M16.7 0h-3.4v15.5a3 3 0 1 1-2.1-2.9V9.1a6.4 6.4 0 1 0 5.5 6.4V9.6a8.4 8.4 0 0 0 4.9 1.6V7.8a5 5 0 0 1-4.9-4.9V0z"/></svg>
+      </a>
+    </div>
+
+    <p class="copyright">© Kaz. All rights reserved</p>
+  </footer>
+
+</main>
+
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const heroName = document.getElementById('heroName');
+    requestAnimationFrame(() => {
+      heroName.classList.add('glitching');
+      setTimeout(() => heroName.classList.remove('glitching'), 950);
+    });
+  });
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('is-visible');
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // Copy Discord username
+  const copyBtn = document.getElementById('copyBtn');
+  const copyLabel = document.getElementById('copyBtnLabel');
+  copyBtn.addEventListener('click', async () => {
+    const text = copyBtn.getAttribute('data-copy');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    copyLabel.textContent = 'Copied!';
+    setTimeout(() => { copyLabel.textContent = 'Copy'; }, 1600);
+  });
+</script>
+
+</body>
+</html>
